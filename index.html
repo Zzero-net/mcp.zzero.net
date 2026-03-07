@@ -1,0 +1,992 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Zero MCP Server — Accept micropayments in your MCP tools</title>
+<meta name="description" content="The Model Context Protocol lets AI agents use tools. Zero adds a payment layer — tools charge per use, agents auto-pay.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@300;400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+/* ============================================
+   DESIGN TOKENS
+   ============================================ */
+:root {
+  --bg: #0a0a0a;
+  --card: #0f0f0f;
+  --border: #1a1a1a;
+  --green: #00ff41;
+  --cyan: #00d4ff;
+  --amber: #ffb000;
+  --red: #ff4444;
+  --text: #c0c0c0;
+  --dim: #606060;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-heading: 'Space Grotesk', sans-serif;
+}
+
+/* ============================================
+   RESET & BASE
+   ============================================ */
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  line-height: 1.7;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* ============================================
+   SCANLINE OVERLAY
+   ============================================ */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.08) 2px,
+    rgba(0, 0, 0, 0.08) 4px
+  );
+}
+
+/* ============================================
+   GRID BACKGROUND
+   ============================================ */
+body::before {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: -1;
+  background-image:
+    linear-gradient(rgba(0, 255, 65, 0.015) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0, 255, 65, 0.015) 1px, transparent 1px);
+  background-size: 40px 40px;
+}
+
+/* ============================================
+   NAVIGATION
+   ============================================ */
+nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 1000;
+  background: rgba(10, 10, 10, 0.92);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  padding: 0 2rem;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.nav-brand {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.nav-brand .logo {
+  font-family: var(--font-heading);
+  font-size: 1.1rem;
+  font-weight: 700;
+  color: var(--green);
+  letter-spacing: 0.05em;
+  text-decoration: none;
+}
+
+.nav-brand .logo span {
+  color: var(--dim);
+  font-weight: 400;
+}
+
+.nav-label {
+  background: rgba(0, 212, 255, 0.1);
+  color: var(--cyan);
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 3px 10px;
+  border: 1px solid rgba(0, 212, 255, 0.25);
+  border-radius: 3px;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
+.nav-links {
+  display: flex;
+  gap: 1.5rem;
+  align-items: center;
+}
+
+.nav-links a {
+  color: var(--dim);
+  text-decoration: none;
+  font-size: 0.8rem;
+  transition: color 0.2s;
+}
+
+.nav-links a:hover {
+  color: var(--text);
+}
+
+/* ============================================
+   LAYOUT
+   ============================================ */
+main {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 80px 2rem 4rem;
+}
+
+section {
+  margin-bottom: 5rem;
+}
+
+/* ============================================
+   TYPOGRAPHY
+   ============================================ */
+h1, h2, h3 {
+  font-family: var(--font-heading);
+  color: #e0e0e0;
+}
+
+h1 {
+  font-size: 3rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+}
+
+h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  margin-bottom: 1.5rem;
+  padding-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+h2 .section-number {
+  color: var(--green);
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  font-weight: 400;
+  opacity: 0.7;
+}
+
+h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text);
+}
+
+p {
+  margin-bottom: 1rem;
+}
+
+a {
+  color: var(--cyan);
+  text-decoration: none;
+}
+
+a:hover {
+  text-decoration: underline;
+}
+
+/* ============================================
+   HERO
+   ============================================ */
+.hero {
+  text-align: center;
+  padding: 6rem 0 4rem;
+  position: relative;
+}
+
+.hero-eyebrow {
+  font-size: 0.75rem;
+  color: var(--green);
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  margin-bottom: 1.5rem;
+  font-weight: 500;
+}
+
+.hero h1 {
+  margin-bottom: 1.5rem;
+}
+
+.hero h1 .accent {
+  color: var(--green);
+  text-shadow: 0 0 30px rgba(0, 255, 65, 0.3);
+}
+
+.hero-subtitle {
+  font-size: 1.15rem;
+  color: var(--text);
+  max-width: 600px;
+  margin: 0 auto 2rem;
+  line-height: 1.6;
+  font-family: var(--font-heading);
+}
+
+.hero-description {
+  font-size: 0.85rem;
+  color: var(--dim);
+  max-width: 640px;
+  margin: 0 auto;
+  line-height: 1.8;
+}
+
+.hero-glow {
+  position: absolute;
+  top: 30%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 500px;
+  height: 500px;
+  background: radial-gradient(circle, rgba(0, 255, 65, 0.04) 0%, transparent 70%);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* ============================================
+   CARDS
+   ============================================ */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 2rem;
+  margin-bottom: 1.5rem;
+}
+
+.card:hover {
+  border-color: rgba(0, 255, 65, 0.15);
+}
+
+/* ============================================
+   CODE BLOCKS
+   ============================================ */
+.code-block {
+  background: #080808;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: 1.5rem;
+}
+
+.code-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.6rem 1rem;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--border);
+}
+
+.code-header .filename {
+  font-size: 0.75rem;
+  color: var(--dim);
+}
+
+.code-header .lang {
+  font-size: 0.65rem;
+  color: var(--amber);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.code-block pre {
+  padding: 1.25rem;
+  overflow-x: auto;
+  font-size: 0.82rem;
+  line-height: 1.7;
+  tab-size: 4;
+}
+
+.code-block code {
+  font-family: var(--font-mono);
+}
+
+/* Syntax highlighting */
+.kw { color: var(--cyan); }          /* keywords */
+.fn { color: var(--amber); }         /* functions */
+.st { color: var(--green); }         /* strings */
+.nu { color: var(--red); }           /* numbers */
+.cm { color: var(--dim); font-style: italic; }  /* comments */
+.op { color: #888; }                 /* operators */
+.dc { color: var(--cyan); opacity: 0.7; }       /* decorators */
+.pr { color: #e0e0e0; }             /* plain/vars */
+.ky { color: #c792ea; }             /* special keys / dict keys */
+
+/* Inline code */
+code.inline {
+  background: rgba(0, 255, 65, 0.06);
+  border: 1px solid rgba(0, 255, 65, 0.12);
+  padding: 0.15em 0.4em;
+  border-radius: 3px;
+  font-size: 0.9em;
+  color: var(--green);
+}
+
+/* ============================================
+   FLOW DIAGRAM
+   ============================================ */
+.flow-diagram {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 1rem 0;
+}
+
+.flow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 1.25rem;
+}
+
+.flow-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  min-width: 40px;
+}
+
+.flow-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.flow-number.agent {
+  background: rgba(0, 212, 255, 0.1);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  color: var(--cyan);
+}
+
+.flow-number.tool {
+  background: rgba(0, 255, 65, 0.1);
+  border: 1px solid rgba(0, 255, 65, 0.3);
+  color: var(--green);
+}
+
+.flow-number.payment {
+  background: rgba(255, 176, 0, 0.1);
+  border: 1px solid rgba(255, 176, 0, 0.3);
+  color: var(--amber);
+}
+
+.flow-line {
+  width: 2px;
+  height: 28px;
+  background: var(--border);
+}
+
+.flow-content {
+  padding: 0.5rem 0 1.5rem;
+}
+
+.flow-content .flow-label {
+  font-family: var(--font-heading);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: #e0e0e0;
+  margin-bottom: 0.25rem;
+}
+
+.flow-content .flow-detail {
+  font-size: 0.8rem;
+  color: var(--dim);
+}
+
+.flow-arrow-label {
+  font-size: 0.65rem;
+  color: var(--dim);
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 2px 0;
+}
+
+/* ============================================
+   TABLE
+   ============================================ */
+.table-wrapper {
+  overflow-x: auto;
+  margin-bottom: 1.5rem;
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+thead {
+  border-bottom: 2px solid var(--border);
+}
+
+th {
+  text-align: left;
+  padding: 0.75rem 1rem;
+  color: var(--dim);
+  font-weight: 500;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+td {
+  padding: 0.75rem 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+tr:hover td {
+  background: rgba(0, 255, 65, 0.02);
+}
+
+.tool-name {
+  color: var(--amber);
+  font-weight: 500;
+}
+
+.cost-z {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.cost-usd {
+  color: var(--dim);
+  font-size: 0.8rem;
+}
+
+/* ============================================
+   QUICK START STEPS
+   ============================================ */
+.steps {
+  counter-reset: step;
+}
+
+.step {
+  display: flex;
+  gap: 1.25rem;
+  margin-bottom: 1.5rem;
+  align-items: flex-start;
+}
+
+.step-num {
+  counter-increment: step;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(0, 255, 65, 0.08);
+  border: 1px solid rgba(0, 255, 65, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--green);
+  font-size: 0.8rem;
+  font-weight: 600;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.step-body h3 {
+  font-size: 0.95rem;
+  margin-bottom: 0.4rem;
+}
+
+.step-body p {
+  font-size: 0.85rem;
+  color: var(--dim);
+  margin-bottom: 0.5rem;
+}
+
+.step-body .code-inline {
+  display: inline-block;
+  background: rgba(0, 255, 65, 0.06);
+  border: 1px solid rgba(0, 255, 65, 0.12);
+  padding: 0.3em 0.6em;
+  border-radius: 3px;
+  font-size: 0.82rem;
+  color: var(--green);
+  margin-top: 0.25rem;
+}
+
+/* ============================================
+   FOOTER
+   ============================================ */
+footer {
+  border-top: 1px solid var(--border);
+  padding: 3rem 2rem;
+  text-align: center;
+}
+
+.footer-links {
+  display: flex;
+  justify-content: center;
+  gap: 2rem;
+  margin-bottom: 1.5rem;
+  flex-wrap: wrap;
+}
+
+.footer-links a {
+  color: var(--dim);
+  font-size: 0.8rem;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.footer-links a:hover {
+  color: var(--green);
+}
+
+.footer-copy {
+  font-size: 0.7rem;
+  color: var(--dim);
+  opacity: 0.6;
+}
+
+/* ============================================
+   CRT FLICKER (subtle)
+   ============================================ */
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  92% { opacity: 1; }
+  93% { opacity: 0.8; }
+  94% { opacity: 1; }
+}
+
+.hero h1 {
+  animation: flicker 8s infinite;
+}
+
+/* ============================================
+   RESPONSIVE
+   ============================================ */
+@media (max-width: 768px) {
+  main {
+    padding: 70px 1rem 3rem;
+  }
+
+  .hero {
+    padding: 3rem 0 2rem;
+  }
+
+  h1 {
+    font-size: 2rem;
+  }
+
+  h2 {
+    font-size: 1.25rem;
+  }
+
+  .hero-subtitle {
+    font-size: 1rem;
+  }
+
+  nav {
+    padding: 0 1rem;
+  }
+
+  .nav-links {
+    display: none;
+  }
+
+  .flow-step {
+    gap: 1rem;
+  }
+
+  .card {
+    padding: 1.25rem;
+  }
+
+  .code-block pre {
+    padding: 1rem;
+    font-size: 0.75rem;
+  }
+
+  .footer-links {
+    gap: 1rem;
+  }
+}
+</style>
+</head>
+<body>
+
+<!-- ============================================
+     NAVIGATION
+     ============================================ -->
+<nav>
+  <div class="nav-brand">
+    <a href="https://zzero.net" class="logo">ZERO <span>network</span></a>
+    <span class="nav-label">MCP</span>
+  </div>
+  <div class="nav-links">
+    <a href="#how-it-works">How It Works</a>
+    <a href="#server">Server</a>
+    <a href="#client">Client</a>
+    <a href="#x402">x402</a>
+    <a href="#pricing">Pricing</a>
+    <a href="#quickstart">Quick Start</a>
+    <a href="https://docs.zzero.net">Docs</a>
+  </div>
+</nav>
+
+<!-- ============================================
+     HERO
+     ============================================ -->
+<main>
+<section class="hero" id="top">
+  <div class="hero-glow"></div>
+  <div class="hero-eyebrow">Model Context Protocol Integration</div>
+  <h1>Zero <span class="accent">MCP</span> Server</h1>
+  <p class="hero-subtitle">Accept micropayments in your MCP tools. AI agents pay per call.</p>
+  <p class="hero-description">
+    The Model Context Protocol (MCP) lets AI agents use tools. Zero adds a payment layer &mdash; tools can charge per use, and agents auto-pay. No subscriptions, no API keys, no invoices. Just frictionless value exchange at machine speed.
+  </p>
+</section>
+
+<!-- ============================================
+     HOW IT WORKS
+     ============================================ -->
+<section id="how-it-works">
+  <h2><span class="section-number">01</span> How It Works</h2>
+  <div class="card">
+    <div class="flow-diagram">
+
+      <div class="flow-step">
+        <div class="flow-connector">
+          <div class="flow-number agent">1</div>
+          <div class="flow-line"></div>
+        </div>
+        <div class="flow-content">
+          <div class="flow-label">Agent calls MCP tool</div>
+          <div class="flow-detail">The AI agent discovers and invokes a tool via the Model Context Protocol, passing the required parameters.</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-connector">
+          <div class="flow-number tool">2</div>
+          <div class="flow-line"></div>
+        </div>
+        <div class="flow-content">
+          <div class="flow-label">Tool returns <code class="inline">payment_required</code></div>
+          <div class="flow-detail">Instead of executing, the tool responds with a Zero address and the amount required to proceed.</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-connector">
+          <div class="flow-number payment">3</div>
+          <div class="flow-line"></div>
+        </div>
+        <div class="flow-content">
+          <div class="flow-label">Agent sends Z payment</div>
+          <div class="flow-detail">The agent's wallet automatically sends the requested amount to the tool's Zero address.</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-connector">
+          <div class="flow-number agent">4</div>
+          <div class="flow-line"></div>
+        </div>
+        <div class="flow-content">
+          <div class="flow-label">Agent resubmits with payment proof</div>
+          <div class="flow-detail">The agent re-calls the tool, this time including the transaction hash as proof of payment.</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="flow-connector">
+          <div class="flow-number tool">5</div>
+        </div>
+        <div class="flow-content">
+          <div class="flow-label">Tool executes and returns result</div>
+          <div class="flow-detail">The tool verifies the payment on-chain, executes the request, and returns the result to the agent.</div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ============================================
+     MCP SERVER IMPLEMENTATION
+     ============================================ -->
+<section id="server">
+  <h2><span class="section-number">02</span> MCP Server Implementation</h2>
+  <p>Build an MCP server that charges per tool call. The server returns a <code class="inline">payment_required</code> response on the first call, then verifies the payment and executes on the second.</p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="filename">server.py</span>
+      <span class="lang">Python</span>
+    </div>
+    <pre><code><span class="kw">from</span> <span class="pr">zero</span> <span class="kw">import</span> <span class="pr">ZeroWallet</span>
+<span class="kw">from</span> <span class="pr">mcp</span> <span class="kw">import</span> <span class="pr">Server</span>
+
+<span class="pr">server</span> <span class="op">=</span> <span class="fn">Server</span>(<span class="st">"paid-search"</span>)
+<span class="pr">wallet</span> <span class="op">=</span> <span class="pr">ZeroWallet</span>.<span class="fn">from_env</span>()
+
+<span class="dc">@server.tool</span>(<span class="st">"web_search"</span>)
+<span class="kw">async def</span> <span class="fn">web_search</span>(<span class="pr">query</span>: <span class="pr">str</span>, <span class="pr">zero_payment</span>: <span class="pr">str</span> <span class="op">=</span> <span class="kw">None</span>):
+    <span class="st">"""Search the web. Costs 0.10 Z per query."""</span>
+
+    <span class="kw">if not</span> <span class="pr">zero_payment</span>:
+        <span class="kw">return</span> {
+            <span class="ky">"error"</span>: <span class="st">"payment_required"</span>,
+            <span class="ky">"network"</span>: <span class="st">"zero"</span>,
+            <span class="ky">"address"</span>: <span class="pr">wallet</span>.<span class="pr">address</span>,
+            <span class="ky">"amount"</span>: <span class="nu">10</span>,
+            <span class="ky">"description"</span>: <span class="st">"Web search query"</span>
+        }
+
+    <span class="pr">verified</span> <span class="op">=</span> <span class="kw">await</span> <span class="pr">wallet</span>.<span class="fn">verify_payment</span>(
+        <span class="pr">tx_hash</span><span class="op">=</span><span class="pr">zero_payment</span>,
+        <span class="pr">min_amount</span><span class="op">=</span><span class="nu">10</span>,
+        <span class="pr">from_any</span><span class="op">=</span><span class="kw">True</span>
+    )
+
+    <span class="kw">if not</span> <span class="pr">verified</span>:
+        <span class="kw">return</span> {<span class="ky">"error"</span>: <span class="st">"payment_invalid"</span>}
+
+    <span class="kw">return</span> {<span class="ky">"results"</span>: <span class="kw">await</span> <span class="fn">do_search</span>(<span class="pr">query</span>)}</code></pre>
+  </div>
+</section>
+
+<!-- ============================================
+     MCP CLIENT IMPLEMENTATION
+     ============================================ -->
+<section id="client">
+  <h2><span class="section-number">03</span> MCP Client Implementation</h2>
+  <p>Agents use the Zero-aware MCP client to automatically handle payment flows. The client detects <code class="inline">payment_required</code> responses, sends payment, and retries &mdash; all transparently.</p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="filename">client.py</span>
+      <span class="lang">Python</span>
+    </div>
+    <pre><code><span class="kw">from</span> <span class="pr">zero.mcp</span> <span class="kw">import</span> <span class="pr">ZeroPaidClient</span>
+
+<span class="cm"># Create a client with spending limits</span>
+<span class="pr">client</span> <span class="op">=</span> <span class="fn">ZeroPaidClient</span>(
+    <span class="pr">wallet</span><span class="op">=</span><span class="pr">my_wallet</span>,
+    <span class="pr">max_per_call</span><span class="op">=</span><span class="nu">100</span>,       <span class="cm"># max 1.00 Z per tool call</span>
+    <span class="pr">max_per_session</span><span class="op">=</span><span class="nu">1000</span>   <span class="cm"># max 10.00 Z per session</span>
+)
+
+<span class="cm"># Tool calls auto-pay when needed</span>
+<span class="pr">result</span> <span class="op">=</span> <span class="kw">await</span> <span class="pr">client</span>.<span class="fn">call_tool</span>(<span class="st">"web_search"</span>, {<span class="ky">"query"</span>: <span class="st">"test"</span>})
+<span class="cm"># 1. Calls tool -> gets payment_required</span>
+<span class="cm"># 2. Sends Z to tool's address</span>
+<span class="cm"># 3. Retries with tx hash -> gets result</span></code></pre>
+  </div>
+</section>
+
+<!-- ============================================
+     x402 HTTP INTEGRATION
+     ============================================ -->
+<section id="x402">
+  <h2><span class="section-number">04</span> x402 HTTP Integration</h2>
+  <p>The same payment pattern extends to standard HTTP APIs using the <a href="https://docs.zzero.net/x402">x402 protocol</a>. Servers return <code class="inline">402 Payment Required</code>, clients pay and retry automatically.</p>
+
+  <h3>Server Side</h3>
+  <div class="code-block">
+    <div class="code-header">
+      <span class="filename">api_server.py</span>
+      <span class="lang">Python</span>
+    </div>
+    <pre><code><span class="kw">from</span> <span class="pr">zero.x402</span> <span class="kw">import</span> <span class="pr">paywall</span>
+
+<span class="dc">@app.get</span>(<span class="st">"/api/search"</span>)
+<span class="dc">@paywall</span>(<span class="pr">amount</span><span class="op">=</span><span class="nu">10</span>, <span class="pr">address</span><span class="op">=</span><span class="st">"zr_merchant"</span>)
+<span class="kw">async def</span> <span class="fn">search</span>(<span class="pr">q</span>: <span class="pr">str</span>):
+    <span class="kw">return</span> <span class="fn">do_search</span>(<span class="pr">q</span>)</code></pre>
+  </div>
+
+  <h3>Client Side</h3>
+  <div class="code-block">
+    <div class="code-header">
+      <span class="filename">api_client.py</span>
+      <span class="lang">Python</span>
+    </div>
+    <pre><code><span class="kw">from</span> <span class="pr">zero.x402</span> <span class="kw">import</span> <span class="pr">HttpClient</span>
+
+<span class="pr">client</span> <span class="op">=</span> <span class="fn">HttpClient</span>(<span class="pr">wallet</span><span class="op">=</span><span class="pr">w</span>)
+<span class="pr">result</span> <span class="op">=</span> <span class="pr">client</span>.<span class="fn">get</span>(<span class="st">"https://api.example.com/search?q=test"</span>)
+<span class="cm"># Auto-handles 402 -> pays -> gets response</span></code></pre>
+  </div>
+</section>
+
+<!-- ============================================
+     PRICING EXAMPLES
+     ============================================ -->
+<section id="pricing">
+  <h2><span class="section-number">05</span> Pricing Examples</h2>
+  <p>Tools set their own prices. Here are some common use cases and typical costs.</p>
+
+  <div class="card">
+    <div class="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Tool</th>
+            <th>Cost</th>
+            <th>USD Equivalent</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="tool-name">Web search</td>
+            <td class="cost-z">0.10 Z</td>
+            <td class="cost-usd">$0.001</td>
+          </tr>
+          <tr>
+            <td class="tool-name">Image generation</td>
+            <td class="cost-z">1.00 Z</td>
+            <td class="cost-usd">$0.01</td>
+          </tr>
+          <tr>
+            <td class="tool-name">Code execution</td>
+            <td class="cost-z">0.50 Z</td>
+            <td class="cost-usd">$0.005</td>
+          </tr>
+          <tr>
+            <td class="tool-name">Data query</td>
+            <td class="cost-z">0.05 Z</td>
+            <td class="cost-usd">$0.0005</td>
+          </tr>
+          <tr>
+            <td class="tool-name">Premium API call</td>
+            <td class="cost-z">5.00 Z</td>
+            <td class="cost-usd">$0.05</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================
+     SPENDING LIMITS
+     ============================================ -->
+<section id="limits">
+  <h2><span class="section-number">06</span> Spending Limits</h2>
+  <p>Control how much agents can spend. Set limits per transaction, per minute, per hour, or per day. No surprises.</p>
+
+  <div class="code-block">
+    <div class="code-header">
+      <span class="filename">limits.py</span>
+      <span class="lang">Python</span>
+    </div>
+    <pre><code><span class="pr">wallet</span>.<span class="fn">set_limits</span>(
+    <span class="pr">per_transaction</span><span class="op">=</span><span class="nu">25</span>,       <span class="cm"># max 0.25 Z per tx</span>
+    <span class="pr">per_minute</span><span class="op">=</span><span class="nu">100</span>,          <span class="cm"># max 1.00 Z per minute</span>
+    <span class="pr">per_hour</span><span class="op">=</span><span class="nu">1000</span>,           <span class="cm"># max 10.00 Z per hour</span>
+    <span class="pr">per_day</span><span class="op">=</span><span class="nu">10000</span>,           <span class="cm"># max 100.00 Z per day</span>
+    <span class="pr">auto_refill</span><span class="op">=</span><span class="kw">False</span>       <span class="cm"># don't auto-refill from main wallet</span>
+)</code></pre>
+  </div>
+</section>
+
+<!-- ============================================
+     QUICK START
+     ============================================ -->
+<section id="quickstart">
+  <h2><span class="section-number">07</span> Quick Start</h2>
+  <p>Get up and running in under a minute.</p>
+
+  <div class="card">
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">1</div>
+        <div class="step-body">
+          <h3>Install the SDK</h3>
+          <p>Add the Zero SDK to your project.</p>
+          <span class="code-inline">pip install zero-sdk</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">2</div>
+        <div class="step-body">
+          <h3>Set your key</h3>
+          <p>Export your Zero wallet key as an environment variable.</p>
+          <span class="code-inline">export ZERO_KEY="your_key"</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">3</div>
+        <div class="step-body">
+          <h3>Add to your MCP server</h3>
+          <p>Import <code class="inline">ZeroWallet</code> and add payment checks to your tool handlers. See the <a href="#server">server example</a> above.</p>
+        </div>
+      </div>
+
+      <div class="step">
+        <div class="step-num">4</div>
+        <div class="step-body">
+          <h3>Agents auto-pay</h3>
+          <p>Any Zero-enabled agent can now discover and pay for your tools automatically. No configuration needed on their end.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<!-- ============================================
+     FOOTER
+     ============================================ -->
+<footer>
+  <div class="footer-links">
+    <a href="https://zzero.net">zzero.net</a>
+    <a href="https://docs.zzero.net">docs.zzero.net</a>
+    <a href="https://explorer.zzero.net">explorer.zzero.net</a>
+    <a href="https://github.com/zzeronet">GitHub</a>
+  </div>
+  <div class="footer-copy">Zero Network &mdash; Machine-native value transfer</div>
+</footer>
+
+</body>
+</html>
